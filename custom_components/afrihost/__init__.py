@@ -15,6 +15,14 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR]
 
 
+def _selected_products(entry: ConfigEntry) -> list[str]:
+    """Return the active product selection, preferring options over initial data."""
+    return (
+        entry.options.get(CONF_SELECTED_PRODUCTS)
+        or entry.data.get(CONF_SELECTED_PRODUCTS, [])
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from pyafrihostapi.client import AfrihostClient, LoginError
 
@@ -39,7 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data={**entry.data, CONF_COOKIES: client.get_cookies()},
         )
 
-    coordinator = AfrihostCoordinator(hass, client, entry.data[CONF_SELECTED_PRODUCTS])
+    coordinator = AfrihostCoordinator(hass, client, _selected_products(entry))
 
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -47,7 +55,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"Initial data fetch failed: {exc}") from exc
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_change))
+
     return True
 
 
@@ -56,3 +68,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
         return True
     return False
+
+
+async def _async_reload_on_options_change(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)

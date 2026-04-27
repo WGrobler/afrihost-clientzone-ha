@@ -35,5 +35,21 @@
     "abort": {
       "already_configured": "This Afrihost account is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage products",
+        "description": "Add or remove products. Changes take effect immediately after saving.",
+        "data": {
+          "selected_products": "Products"
+        }
+      }
+    },
+    "error": {
+      "cannot_fetch_products": "Failed to retrieve the product list. Try again.",
+      "no_products_available": "No products found on this account.",
+      "no_products_selected": "Select at least one product."
+    }
   }
 }

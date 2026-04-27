@@ -6,6 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
     SelectSelector,
@@ -95,10 +96,31 @@ def _gather_products(client) -> dict[str, str]:
     return options
 
 
+def _product_select_schema(
+    options: dict[str, str], current: list[str]
+) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_SELECTED_PRODUCTS, default=current): SelectSelector(
+                SelectSelectorConfig(
+                    options=[{"value": k, "label": v} for k, v in options.items()],
+                    multiple=True,
+                    mode=SelectSelectorMode.LIST,
+                )
+            ),
+        }
+    )
+
+
 class AfrihostConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the Afrihost config flow."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> AfrihostOptionsFlow:
+        return AfrihostOptionsFlow()
 
     def __init__(self) -> None:
         self._client = None
@@ -218,19 +240,61 @@ class AfrihostConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="products",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SELECTED_PRODUCTS): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {"value": k, "label": v}
-                                for k, v in self._product_options.items()
-                            ],
-                            multiple=True,
-                            mode=SelectSelectorMode.LIST,
-                        )
-                    ),
-                }
-            ),
+            data_schema=_product_select_schema(self._product_options, []),
+            errors=errors,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Options flow — shown when the user clicks "Configure" on the integration
+# ---------------------------------------------------------------------------
+
+class AfrihostOptionsFlow(config_entries.OptionsFlow):
+    """Allow the user to add or remove products after initial setup."""
+
+    def __init__(self) -> None:
+        self._product_options: dict[str, str] = {}
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+
+        # Re-use the already-authenticated client from the running coordinator
+        coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+
+        if not self._product_options:
+            if coordinator is not None:
+                try:
+                    self._product_options = await self.hass.async_add_executor_job(
+                        _gather_products, coordinator.client
+                    )
+                except Exception as exc:
+                    _LOGGER.exception("Failed to fetch product list: %s", exc)
+                    errors["base"] = "cannot_fetch_products"
+            else:
+                errors["base"] = "cannot_fetch_products"
+
+        if not self._product_options and not errors:
+            errors["base"] = "no_products_available"
+
+        current = (
+            self.config_entry.options.get(CONF_SELECTED_PRODUCTS)
+            or self.config_entry.data.get(CONF_SELECTED_PRODUCTS, [])
+        )
+
+        if user_input is not None and not errors:
+            selected: list[str] = user_input.get(CONF_SELECTED_PRODUCTS, [])
+            if not selected:
+                errors[CONF_SELECTED_PRODUCTS] = "no_products_selected"
+            else:
+                return self.async_create_entry(
+                    title="",
+                    data={CONF_SELECTED_PRODUCTS: selected},
+                )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_product_select_schema(self._product_options, current),
             errors=errors,
         )

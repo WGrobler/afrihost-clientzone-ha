@@ -22,7 +22,8 @@ try:
 except ImportError:
     UnitOfInformation = type("UnitOfInformation", (), {"GIGABYTES": "GB"})()
 
-from .const import CONF_SELECTED_PRODUCTS, DOMAIN
+from . import _selected_products
+from .const import DOMAIN
 from .coordinator import AfrihostCoordinator
 
 
@@ -86,8 +87,50 @@ _BANDWIDTH_SENSORS: tuple[AfrihostSensorDescription, ...] = (
     ),
 )
 
+def _wallet_data_gb(p: dict) -> float | None:
+    """Data remaining for AirMobile SIMs (bytes stored in _wallet)."""
+    v = (p.get("_wallet") or {}).get("_data_remaining_bytes")
+    try:
+        return round(int(v) / (1024 ** 3), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _composite_bytes_to_gb(field: str) -> Callable[[dict], Any]:
+    """Read a bytes field from _composite and return GB (voice SIMs only)."""
+    def fn(p: dict) -> float | None:
+        v = (p.get("_composite") or {}).get(field)
+        try:
+            return round(int(v) / (1024 ** 3), 2)
+        except (TypeError, ValueError):
+            return None
+    return fn
+
+
+def _data_remaining_gb(p: dict) -> float | None:
+    """Data remaining: composite for voice SIMs, _wallet for AirMobile."""
+    if p.get("_wallet_source") == "airmobile":
+        return _wallet_data_gb(p)
+    return _composite_bytes_to_gb("bandwidth_available")(p)
+
+
+def _composite_pct(p: dict) -> float | None:
+    v = (p.get("_composite") or {}).get("percentage_used")
+    try:
+        return round(float(v), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 def _wallet_value(wallet_key: str) -> Callable[[dict], Any]:
-    """Return a value_fn that reads a wallet balance and converts to display currency."""
+    """Return a value_fn that reads a wallet balance, handling both wallet shapes.
+
+    Voice wallet (solution_type_id 800/810/811):
+      _wallet = {"summary_airtime": {"balance": 7683, "airtime_wallet_type": {"display_amount": 0.01, ...}}}
+
+    AirMobile wallet (solution_type_id 840):
+      Response shape confirmed at runtime — falls back gracefully if key absent.
+    """
     def fn(p: dict) -> float | None:
         wallet = p.get("_wallet") or {}
         entry = wallet.get(wallet_key) or {}
@@ -122,6 +165,37 @@ _SIM_SENSORS: tuple[AfrihostSensorDescription, ...] = (
         native_unit_of_measurement="SMS",
         state_class=SensorStateClass.TOTAL,
         value_fn=_wallet_value("summary_sms"),
+    ),
+    AfrihostSensorDescription(
+        key="data_remaining",
+        name="Data Remaining",
+        native_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_data_remaining_gb,
+    ),
+    AfrihostSensorDescription(
+        key="data_used",
+        name="Data Used",
+        native_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_composite_bytes_to_gb("bandwidth_used"),
+    ),
+    AfrihostSensorDescription(
+        key="data_limit",
+        name="Data Limit",
+        native_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_composite_bytes_to_gb("bandwidth_limit"),
+    ),
+    AfrihostSensorDescription(
+        key="data_used_pct",
+        name="Data Usage",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_composite_pct,
     ),
 )
 
@@ -179,7 +253,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator: AfrihostCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[AfrihostSensor] = []
-    for product_key in entry.data[CONF_SELECTED_PRODUCTS]:
+    for product_key in _selected_products(entry):
         ptype = product_key.split(":")[0]
         for desc in _SENSORS_BY_TYPE.get(ptype, ()):
             entities.append(AfrihostSensor(coordinator, product_key, desc, entry.entry_id))

@@ -12,6 +12,33 @@ from .const import DOMAIN, UPDATE_INTERVAL_MINUTES
 _LOGGER = logging.getLogger(__name__)
 
 
+def _normalize_airmobile_wallet(resp: dict) -> dict:
+    """Convert /balances/summary response to the internal wallet dict.
+
+    Input:  {"balances": [{"slug": "airtime", "amount": 2000, ...},
+                          {"slug": "data",    "amount": 6139220654, ...}]}
+
+    Output uses the same keys as the voice wallet so sensors work identically:
+      summary_airtime  — airtime in cents, display_amount=0.01 → rands
+      _data_remaining_bytes — raw bytes, converted to GB by the sensor
+    """
+    wallet: dict = {}
+    for b in resp.get("balances") or []:
+        slug = b.get("slug")
+        amount = b.get("amount", 0)
+        if slug == "airtime":
+            wallet["summary_airtime"] = {
+                "balance": amount,
+                "airtime_wallet_type": {
+                    "display_amount": 0.01,
+                    "display_unit": {"symbol": "R", "prefix_symbol": True},
+                },
+            }
+        elif slug == "data":
+            wallet["_data_remaining_bytes"] = amount
+    return wallet
+
+
 class AfrihostCoordinator(DataUpdateCoordinator[dict]):
     """Fetch data for every selected product in a single update cycle."""
 
@@ -67,15 +94,35 @@ class AfrihostCoordinator(DataUpdateCoordinator[dict]):
                     data[f"device:{pid}"] = p
 
         if sim_ids:
+            from pyafrihostapi.client import _is_airmobile
             for p in self.client.mobile.raw().get("data", []):
                 pid = str(p["id"])
                 if pid in sim_ids:
                     wallet: dict = {}
+                    wallet_source = "airmobile" if _is_airmobile(p) else "voice"
                     try:
-                        wallet = self.client.mobile.wallet_balances(p).get("data", {})
+                        resp = self.client.mobile.wallet_balances(p)
+                        if wallet_source == "airmobile":
+                            wallet = _normalize_airmobile_wallet(resp)
+                        else:
+                            wallet = resp.get("data", {})
                     except Exception:
                         _LOGGER.debug("Could not fetch wallet for mobile_sim:%s", pid)
-                    data[f"mobile_sim:{pid}"] = {**p, "_wallet": wallet}
+                    composite_usage: dict = {}
+                    if wallet_source != "airmobile":
+                        try:
+                            comp = self.client.mobile.composite(pid)
+                            composite_usage = (
+                                comp.get("data", {}).get("data", {}).get("usage", {})
+                            )
+                        except Exception:
+                            _LOGGER.debug("Could not fetch composite for mobile_sim:%s", pid)
+                    data[f"mobile_sim:{pid}"] = {
+                        **p,
+                        "_wallet": wallet,
+                        "_wallet_source": wallet_source,
+                        "_composite": composite_usage,
+                    }
 
         if voip_ids:
             for p in self.client.voip.raw().get("client_solutions", []):
