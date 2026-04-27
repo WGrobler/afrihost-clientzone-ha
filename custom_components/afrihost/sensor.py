@@ -207,6 +207,34 @@ _STATUS_SENSORS: tuple[AfrihostSensorDescription, ...] = (
     ),
 )
 
+
+def _voip_airtime_balance(p: dict) -> float | None:
+    """Sum all airtime balance entries for a VoIP product (already in rands)."""
+    balances = p.get("_airtime") or []
+    if not balances:
+        return None
+    try:
+        return round(sum(float(b.get("balance", 0)) for b in balances), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+_VOIP_SENSORS: tuple[AfrihostSensorDescription, ...] = (
+    AfrihostSensorDescription(
+        key="status",
+        name="Status",
+        value_fn=_str_field("status"),
+    ),
+    AfrihostSensorDescription(
+        key="airtime_balance",
+        name="Airtime Balance",
+        native_unit_of_measurement="ZAR",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        value_fn=_voip_airtime_balance,
+    ),
+)
+
 _DEVICE_SENSORS: tuple[AfrihostSensorDescription, ...] = (
     AfrihostSensorDescription(
         key="status",
@@ -236,7 +264,7 @@ _SENSORS_BY_TYPE: dict[str, tuple[AfrihostSensorDescription, ...]] = {
     "wireless":   _BANDWIDTH_SENSORS,
     "mobile_apn": _BANDWIDTH_SENSORS,
     "mobile_sim": _SIM_SENSORS,
-    "voip":       _STATUS_SENSORS,
+    "voip":       _VOIP_SENSORS,
     "device":     _DEVICE_SENSORS,
     "hosting":    _HOSTING_SENSORS,
 }

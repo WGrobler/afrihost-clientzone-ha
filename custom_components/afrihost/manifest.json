@@ -3,7 +3,7 @@
   "name": "Afrihost",
   "version": "0.1.0",
   "documentation": "https://github.com/yourname/afrihost-clientzone",
-  "requirements": ["afrihost-clientzone @ git+https://github.com/WGrobler/pyafrihostapi"],
+  "requirements": ["pyafrihostapi @ git+https://github.com/WGrobler/pyafrihostapi"],
   "dependencies": [],
   "codeowners": [],
   "config_flow": true,

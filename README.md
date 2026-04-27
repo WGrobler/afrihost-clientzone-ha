@@ -4,10 +4,10 @@ Custom component for [Home Assistant](https://www.home-assistant.io/) that expos
 
 ## Requirements
 
-Install the `afrihost-clientzone` Python package into Home Assistant before enabling the integration:
+Install the `pyafrihostapi` Python package into Home Assistant before enabling the integration:
 
 ```bash
-pip install afrihost-clientzone
+pip install pyafrihostapi
 ```
 
 For development, install from the local source:

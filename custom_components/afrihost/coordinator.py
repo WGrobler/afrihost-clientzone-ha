@@ -128,7 +128,13 @@ class AfrihostCoordinator(DataUpdateCoordinator[dict]):
             for p in self.client.voip.raw().get("client_solutions", []):
                 pid = str(p["id"])
                 if pid in voip_ids:
-                    data[f"voip:{pid}"] = p
+                    airtime_balances: list = []
+                    try:
+                        resp = self.client.voip.airtime_balances_live(pid)
+                        airtime_balances = resp.get("balances", [])
+                    except Exception:
+                        _LOGGER.debug("Could not fetch airtime balance for voip:%s", pid)
+                    data[f"voip:{pid}"] = {**p, "_airtime": airtime_balances}
 
         if hosting_ids:
             hosting = self.client.hosting.raw()
