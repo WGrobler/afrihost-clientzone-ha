@@ -1,0 +1,21 @@
+{
+  "version": "0.2",
+  "words": [
+    "afrihost",
+    "homeassistant",
+    "hass",
+    "friendlyname",
+    "msisdn",
+    "iccid",
+    "voip",
+    "lte",
+    "apn",
+    "clientzone",
+    "codeowners",
+    "unload",
+    "reauth",
+    "twofa",
+    "dotenv",
+    "csrf"
+  ]
+}

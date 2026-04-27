@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Afrihost ClientZone",
+        "description": "Enter your Afrihost ClientZone login credentials.",
+        "data": {
+          "username": "Email address",
+          "password": "Password"
+        }
+      },
+      "twofa": {
+        "title": "Two-factor authentication",
+        "description": "A one-time code has been sent to your registered {method} number. Enter it below.",
+        "data": {
+          "code": "Verification code"
+        }
+      },
+      "products": {
+        "title": "Select products",
+        "description": "Choose which products to expose as sensors in Home Assistant.",
+        "data": {
+          "selected_products": "Products"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Afrihost ClientZone. Check your network connection.",
+      "invalid_auth": "Invalid email address or password.",
+      "invalid_2fa": "Invalid or expired verification code. Request a new one and try again.",
+      "cannot_fetch_products": "Connected successfully but failed to retrieve the product list. Try again.",
+      "no_products_available": "No products found on this account.",
+      "no_products_selected": "Select at least one product."
+    },
+    "abort": {
+      "already_configured": "This Afrihost account is already configured."
+    }
+  }
+}
